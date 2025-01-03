@@ -2,7 +2,7 @@ import csv
 import bisect
 import json
 import re
-from sympy.parsing.latex import parse_latex
+
 
 #es mas eficiente tener una lista con los ejercicios y luego dentro de cada ejercicio tener otra lista con la informacion de los pasos(respuestas incorrectas blabla)
 class Ejercicio:
@@ -72,21 +72,9 @@ def searchWrongAnswer(listaRespuestas, respuestaIncorrecta):
     while(i<largo and listaRespuestas[i].answer != respuestaIncorrecta):
         i=i+1
     if i<largo:
-        print("iguales")
         return i
     else:
         return -1
-#    if len(listaRespuestas)==0:
-#        return -1
-#    for i in range(0,len(listaRespuestas)):
-#        iguales=True
-#        for j in range(0,len(listaRespuestas[i].answer)):
-#            exp1=parse_latex(listaRespuestas[i].answer[j])
-#            exp2=parse_latex(respuestaIncorrecta[j])
-#            if exp1!=exp2:
-#                iguales=False
-#        if iguales==True:
-#            return i
 
 def addStudent(listaEstudiantes, idEstudiante):
     # Encontrar la posición donde debería estar el estudiante
@@ -98,22 +86,16 @@ def addStudent(listaEstudiantes, idEstudiante):
     return False  # El estudiante ya existía
 
 
-
-
 #Funcion que extrae las respuestas del campo extra
 def clean_latex_string(latex_str):
     # Eliminar caracteres de control como \x0c
     return latex_str.replace("\x0c", "f")
 
 def preprocess_json(data):
-    """
-    Preprocesa la cadena JSON para corregir problemas comunes:
-    - Escapa barras invertidas no escapadas.
-    """
     # Reemplazar barras invertidas no escapadas
     data = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'\\\\', data)
     return data
-
+#Como el campo extra es formato json, podemos transformarlo de string a json y despues extraer la respuesta
 def extract_responses(data):
     try:
         # Preprocesar la cadena JSON para evitar errores de formato
@@ -168,7 +150,6 @@ def extract_responses(data):
 ejercicios=[]
 respuestasCorrectas=[]
 
-#AL FINAL DE TODO AÑADIR LAS RESPUESTAS CORRECTAS POR PASO
 
 #encoding='utf-8', se usa '""' como quotechar por el campo 'extra', ya que este tiene ',' dentro
 with open('Copy of data-1734621405509.csv', newline='') as csvfile:
@@ -180,7 +161,7 @@ with open('Copy of data-1734621405509.csv', newline='') as csvfile:
     for row in spamreader:
         verbName=row[2]
         #hay 332 ejercicios, 5 de los cuales tiene stepId como array y otros 25 no tienen respuestas incorrectas
-        #AÑADIR LOS EJERCICIOS QUE NO TENGAN RESPUESTAS INCORRECTAS
+        
         if(verbName=="tryStep"):
             isCorrect = int(row[4])
             contentCode= row[0]
@@ -283,6 +264,7 @@ with open(archivo, mode='w', newline='', encoding='utf-8') as archivo_csv:
                     linea.append(respuestaBlanco)
             elif(len(paso.wrongAnswers)<5):
                 #Añadimos las repsuestas que haya
+                respuestasIncorrectas=paso.wrongAnswers.sort(key=lambda x: x.frecuency, reverse=True)
                 for i in range(0,len(paso.wrongAnswers)):
                     respuestaMala=str(paso.wrongAnswers[i].answer) +','+ str(len(paso.wrongAnswers[i].students)) + ',' + str(paso.wrongAnswers[i].frecuency)
                     linea.append(respuestaMala)
