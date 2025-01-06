@@ -3,7 +3,6 @@ import bisect
 import json
 import re
 
-
 #es mas eficiente tener una lista con los ejercicios y luego dentro de cada ejercicio tener otra lista con la informacion de los pasos(respuestas incorrectas blabla)
 class Ejercicio:
     def __init__(self, contentCode, id, steps):
@@ -26,11 +25,6 @@ class Respuestaincorrecta:
         self.frecuency = frecuency
         self.students = students #tendra los ids de los estudiantes que hayan contestado esta respuesta incorrecta(lista de enteros)
 
-class Respuestacorrecta:
-    def __init__(self, contentCode,stepId,answer):
-        self.contentCode=contentCode
-        self.stepId=stepId
-        self.answer=answer
 #Con esta funcion se añadiran ejercicios a la lista de forma ordenada, para que la busqueda sea mas eficiente
 def addExercise(listaEjercicios, ejercicio):
     bisect.insort(listaEjercicios, ejercicio, key=lambda ej: ej.contentCode)
@@ -76,6 +70,7 @@ def searchWrongAnswer(listaRespuestas, respuestaIncorrecta):
     else:
         return -1
 
+#Esta funcion recibe un arreglo con los estudiantes que han respondido cierta respuesta incorrecta a un paso de una pregunta
 def addStudent(listaEstudiantes, idEstudiante):
     # Encontrar la posición donde debería estar el estudiante
     pos = bisect.bisect_left(listaEstudiantes, idEstudiante)
@@ -85,16 +80,18 @@ def addStudent(listaEstudiantes, idEstudiante):
         return True  # Se agregó el estudiante
     return False  # El estudiante ya existía
 
-
-#Funcion que extrae las respuestas del campo extra
+#Funcion que corrige el formato de las expresiones con fraccion
 def clean_latex_string(latex_str):
     # Eliminar caracteres de control como \x0c
     return latex_str.replace("\x0c", "f")
 
+#Esta función recibe una cadena de texto, busca las barras invertidas no escapadas (que no forman
+#parte de secuencias de escape válidas) y las reemplaza por dos barras invertidas para evitar errores de interpretación.
 def preprocess_json(data):
     # Reemplazar barras invertidas no escapadas
     data = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'\\\\', data)
     return data
+
 #Como el campo extra es formato json, podemos transformarlo de string a json y despues extraer la respuesta
 def extract_responses(data):
     try:
@@ -105,7 +102,7 @@ def extract_responses(data):
         parsed_data = json.loads(data)
         response = parsed_data.get("response", None)
         
-        # Si la respuesta es None o es una lista con un único elemento null
+        # Si la respuesta es None o es una lista con un único elemento null retornamos un array vacio
         if response is None or response == [None]:
             return []
 
@@ -121,8 +118,10 @@ def extract_responses(data):
                 if isinstance(item, list):
                     for subitem in item:
                         result.append(clean_latex_string(subitem))
+                #Si es un string, lo procesamos y lo añadimos a la lista
                 elif isinstance(item, str):
                     result.append(clean_latex_string(item))
+                #Si es un diccionario, lo procesamos y extramos el valor de la llave value para añadirlo al array
                 elif isinstance(item, dict) and "value" in item:
                     result.append(clean_latex_string(item["value"]))
             return result
@@ -131,6 +130,7 @@ def extract_responses(data):
         if isinstance(response, dict):
             result = []
             for values in response.values():
+                #Extraemos las respuestas del campo llamado 'value'
                 if isinstance(values, list):
                     for value in values:
                         if isinstance(value, dict) and "value" in value:
@@ -142,14 +142,9 @@ def extract_responses(data):
     except json.JSONDecodeError as e:
         print(f"Error al decodificar JSON: {e}")
         return []
-    
-
-
 
 #Creamos una lista donde iran los ejercicios, se iran añadiendo los ejercicios de manera ordenada segun su id
 ejercicios=[]
-respuestasCorrectas=[]
-
 
 #encoding='utf-8', se usa '""' como quotechar por el campo 'extra', ya que este tiene ',' dentro
 with open('Copy of data-1734621405509.csv', newline='') as csvfile:
@@ -161,17 +156,20 @@ with open('Copy of data-1734621405509.csv', newline='') as csvfile:
     for row in spamreader:
         verbName=row[2]
         #hay 332 ejercicios, 5 de los cuales tiene stepId como array y otros 25 no tienen respuestas incorrectas
-        
+        #Solo nos quedamos con los ejercicios de tipo TryStep
         if(verbName=="tryStep"):
             isCorrect = int(row[4])
             contentCode= row[0]
+
+            #Si la respuesta es incorrecta, la procesamos
             if isCorrect==0 :
-                
                 try:
                     numPaso=int(row[9])
                     #Ignorar los ejercicios wp(word problems) no seran modificados, tienen stepId como array
                 except ValueError:
                     continue
+
+                #Obtenemos el campo extra
                 respuesta=extract_responses(row[13])   
             
                 exerciseIndex=binarySearchExercise(ejercicios, contentCode, 0, len(ejercicios)-1)
@@ -239,7 +237,6 @@ with open('Copy of data-1734621405509.csv', newline='') as csvfile:
                 if (ejercicios[exerciseIndex].steps[stepIndex].correctAnswer==None):
                     ejercicios[exerciseIndex].steps[stepIndex].correctAnswer=correctAnswer
 
-
 # Crear y escribir en el archivo CSV
 archivo = "salida.csv"
 
@@ -282,10 +279,4 @@ with open(archivo, mode='w', newline='', encoding='utf-8') as archivo_csv:
                     linea.append(respuestaMala)
             escritor.writerow(linea)
 
-
 print(f"Archivo {archivo} creado con éxito.")
-
-                
-#primero ver si el ejercicio existe, luego ver si ya han habido respuestas para ese paso, luego ver si ya existia esa respuesta incorrecta, si no habia alguna, se crea
-#Primero almacenar en un struct(lista)
-#code del ejercicio, paso, respuesta correcta, lista de respuestas incorrectas con su frecuencia y una lista con estudiantes que dieron esa respuesta incorrecta
