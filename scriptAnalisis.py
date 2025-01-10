@@ -14,8 +14,8 @@ def buscar_topico(ejercicio):
             for subtopico, ejercicios in contenido.items():
                     #Verificamos i el ejercicio pertenece al subtopico, si es asi devolvemos el topico actual
                     if ejercicio in ejercicios:
-                        return topico
-    return None
+                        return topico,subtopico
+    return None,None
 
 
 
@@ -89,10 +89,12 @@ def anadir_ejercicio(contentCode, paso, respuesta, respuesta_parseada, id_estudi
     #Si no esta, lo añadimos al diccionario ejercicios
     if contentCode not in ejercicios:
         #Obtenemos el topico del ejercicio segun su contentId
-        topico=buscar_topico(contentCode)
+        topico,subtopico=buscar_topico(contentCode)
+        
         #Añadimos el ejercicio
         ejercicios[contentCode] = {
             "topico": topico,  # o el tópico que desees
+            "subtopico": subtopico,
             "pasos": {}
         }
    
@@ -206,31 +208,32 @@ with open("datos-trystep-noexcel.csv", "r") as archivo:
             contentId=linea[0]
             isCorrect=int(linea[4])
             respuesta=extract_responses(linea[13])
-            paso=int(linea[9])
-            respuesta_parseada=[]
-            idEstudiante=int(linea[6])
-            try:
-                id_topico=int(linea[8])
-            except Exception as e:
-                id_topico=0
-            
-            if(isCorrect==0):
-                isCorrectBool=False
-            else:
-                isCorrectBool=True
-            #Intentamos parsear las respuestas
-            try:
-                #Las vamos añadiendo al array de respuestas parseadas
-                for i in range(0,len(respuesta)):
-                    expresion=normalize_expression(respuesta[i])
-                    expresion=sympify(expresion)
-                    respuesta_parseada.append(expresion)
-                anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
-            except Exception as e:
-                #Si no podemos parsear una respuesta, dejamos el array de respuestas parseadas en None
-                cont=cont+1
-                respuesta_parseada=None
-                anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
+            if '' not in respuesta:
+                paso=int(linea[9])
+                respuesta_parseada=[]
+                idEstudiante=int(linea[6])
+                try:
+                    id_topico=int(linea[8])
+                except Exception as e:
+                    id_topico=0
+                
+                if(isCorrect==0):
+                    isCorrectBool=False
+                else:
+                    isCorrectBool=True
+                #Intentamos parsear las respuestas
+                try:
+                    #Las vamos añadiendo al array de respuestas parseadas
+                    for i in range(0,len(respuesta)):
+                        expresion=normalize_expression(respuesta[i])
+                        expresion=sympify(expresion)
+                        respuesta_parseada.append(expresion)
+                    anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
+                except Exception as e:
+                    #Si no podemos parsear una respuesta, dejamos el array de respuestas parseadas en None
+                    cont=cont+1
+                    respuesta_parseada=None
+                    anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
 
 
 print(100-((cont/cont2)*100))
@@ -245,7 +248,7 @@ with open(nombre_archivo,mode="w", newline='', encoding="utf-8") as archivo:
 
     # Escribir encabezado
     encabezado = [
-        "ContentCode", "topico", "stepId", "Respuesta Correcta", "Incorrectas equivalentes a correcta",
+        "ContentCode", "topico", "Subtópico","stepId", "Respuesta Correcta", "Incorrectas equivalentes a correcta",
         "Respuesta Incorrecta 1", "Respuesta Incorrecta 2", 
         "Respuesta Incorrecta 3", "Respuesta Incorrecta 4", 
         "Respuesta Incorrecta 5"
@@ -256,6 +259,7 @@ with open(nombre_archivo,mode="w", newline='', encoding="utf-8") as archivo:
     for content_code, datos in ejercicios.items():
         #Obtemeos la informacion para poner en las columnas
         topico = datos["topico"]
+        subtopico=datos["subtopico"]
         if topico!=None:
             for step_id, paso_data in datos["pasos"].items():
                 # Respuesta correcta
@@ -264,7 +268,7 @@ with open(nombre_archivo,mode="w", newline='', encoding="utf-8") as archivo:
                 # Obtener respuestas incorrectas ordenadas por frecuencia
                 respuestas_incorrectas = sorted(
                     paso_data["respuestas_incorrectas"].items(),
-                    key=lambda item: item[1]["frecuencia"],
+                    key=lambda item: len(item[1]["estudiantes"]),
                     reverse=True
                 ) 
 
@@ -315,6 +319,7 @@ with open(nombre_archivo,mode="w", newline='', encoding="utf-8") as archivo:
                 fila = [
                     content_code,
                     topico,
+                    subtopico,
                     step_id,
                     respuesta_correcta,
                     respuestas_equivalentes_correcta_string,
