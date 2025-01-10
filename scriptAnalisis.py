@@ -1,96 +1,35 @@
 import csv
-import bisect
-import json
 import re
+import json
+from parseo import normalize_expression
+from sympy import sympify
+from dicc import ejercicios_por_topico
 
-#es mas eficiente tener una lista con los ejercicios y luego dentro de cada ejercicio tener otra lista con la informacion de los pasos(respuestas incorrectas blabla)
-class Ejercicio:
-    def __init__(self, contentCode, id, steps):
-        self.contentCode = contentCode #string
-        self.id = id #int
-        self.steps = steps #Lista de pasos del ejercicio, para cada paso se tendra una lista de respuestas incorrectas, para cada una se tendra su frecuencia y la lista de estudiantes que contestaron esa respuesta
+#Esta funcion busca a que topico pertenece un ejercicio, recibe el contentId de un ejercicio y lo busca en el diccionario ejercicios_por_topico
+def buscar_topico(ejercicio):
+    for topico, contenido in ejercicios_por_topico.items():
+        # Verificar si contenido es un diccionario antes de usar .get
+        if isinstance(contenido, dict):
+            #Recorremos los subtopicos 
+            for subtopico, ejercicios in contenido.items():
+                    #Verificamos i el ejercicio pertenece al subtopico, si es asi devolvemos el topico actual
+                    if ejercicio in ejercicios:
+                        return topico
+    return None
 
-class Paso:
-    def __init__(self, contentCodeEj, stepId, cantRespuestas, respuestaCorrecta, incorrectas):
-        self.contentCodeEj = contentCodeEj #String
-        self.stepId = stepId #int
-        self.cantRespuestas=cantRespuestas  #Cantidad de respuestas que tiene el paso
-        self.correctAnswer = respuestaCorrecta #Respuesta correcta de ese paso en especifico
-        self.wrongAnswers = incorrectas #Lista de respuestas incorrectas, para cada una se tendra su frecuencia y la lista de estudiantes que contestaron esa respuesta
 
-class Respuestaincorrecta:
-    def __init__(self, contentCodeExcercise, answer, frecuency, students):
-        self.contentCodeExercise = contentCodeExcercise #String
-        self.answer = answer #lista de strings(ya que en un paso pueden haber varias respuestas)
-        self.frecuency = frecuency
-        self.students = students #tendra los ids de los estudiantes que hayan contestado esta respuesta incorrecta(lista de enteros)
 
-#Con esta funcion se añadiran ejercicios a la lista de forma ordenada, para que la busqueda sea mas eficiente
-def addExercise(listaEjercicios, ejercicio):
-    bisect.insort(listaEjercicios, ejercicio, key=lambda ej: ej.contentCode)
-
-#Busqueda binaria adaptada para una lista de elementos de tipo Ejercicio, se busca segun la id de los ejercicios
-def binarySearchExercise(listaEjercicios, codeX, left, right):
-    if right>=left :
-        mid = (left+right)//2
-        if listaEjercicios[mid].contentCode==codeX:
-            return mid #Retornamos el indice dela lista donde se encuentra el ejercicio buscado
-        elif codeX < listaEjercicios[mid].contentCode:
-            return binarySearchExercise(listaEjercicios, codeX, left, mid-1)
-        else:
-            return binarySearchExercise(listaEjercicios, codeX, mid+1,right)
-    else:
-        return -1
-
-#Funcion que añade un paso a la lista de pasos de un ejercicio, se iran añadiendo de manera ordenada de acuerdo a la id del paso
-def addStep(listaPasos, paso):
-    bisect.insort(listaPasos, paso, key=lambda step: step.stepId)
-    
-#Busqueda binaria adaptada para una lista de elementos de tipo Paso, se busca segun la id de los pasos
-def binarySearchStep(listaPasos, idPaso, left, right):
-    if right>=left :
-        mid = (left+right)//2
-        if listaPasos[mid].stepId==idPaso:
-            return mid #Retornamos el indice dela lista donde se encuentra el paso buscado
-        elif idPaso < listaPasos[mid].stepId:
-            return binarySearchStep(listaPasos, idPaso, left, mid-1)
-        else:
-            return binarySearchStep(listaPasos, idPaso, mid+1,right)
-    else:
-        return -1
-
-#Recibe el arreglo con las distintas respuestas incorrectas a un paso y una respuesta incorrecta y debe buscarla en el array 
-def searchWrongAnswer(listaRespuestas, respuestaIncorrecta):
-    largo=len(listaRespuestas)
-    i=0
-    while(i<largo and listaRespuestas[i].answer != respuestaIncorrecta):
-        i=i+1
-    if i<largo:
-        return i
-    else:
-        return -1
-
-#Esta funcion recibe un arreglo con los estudiantes que han respondido cierta respuesta incorrecta a un paso de una pregunta
-def addStudent(listaEstudiantes, idEstudiante):
-    # Encontrar la posición donde debería estar el estudiante
-    pos = bisect.bisect_left(listaEstudiantes, idEstudiante)
-    # Verificar si el estudiante ya existe
-    if pos == len(listaEstudiantes) or listaEstudiantes[pos] != idEstudiante:
-        listaEstudiantes.insert(pos, idEstudiante)
-        return True  # Se agregó el estudiante
-    return False  # El estudiante ya existía
 
 #Funcion que corrige el formato de las expresiones con fraccion
 def clean_latex_string(latex_str):
     # Eliminar caracteres de control como \x0c
     return latex_str.replace("\x0c", "f")
 
-#Esta función recibe una cadena de texto, busca las barras invertidas no escapadas (que no forman
-#parte de secuencias de escape válidas) y las reemplaza por dos barras invertidas para evitar errores de interpretación.
+#Esta función recibe una cadena de texto, busca las barras invertidas y las reemplaza por dos barras invertidas para evitar errores de interpretación.
 def preprocess_json(data):
-    # Reemplazar barras invertidas no escapadas
-    data = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'\\\\', data)
-    return data
+    # Reemplazar directamente las barras invertidas
+    return re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'\\\\', data, flags=re.DOTALL)
+
 
 #Como el campo extra es formato json, podemos transformarlo de string a json y despues extraer la respuesta
 def extract_responses(data):
@@ -140,143 +79,247 @@ def extract_responses(data):
         # Devolver array vacío si no se puede procesar
         return []
     except json.JSONDecodeError as e:
-        print(f"Error al decodificar JSON: {e}")
+        #print(f"Error al decodificar JSON: {e}")
         return []
+    
+# Función para añadir un ejercicio y sus respuestas
+def anadir_ejercicio(contentCode, paso, respuesta, respuesta_parseada, id_estudiante, es_correcta, id_topico):
+    global ejercicios
+    # Verificar si el ejercicio ya existe
+    #Si no esta, lo añadimos al diccionario ejercicios
+    if contentCode not in ejercicios:
+        #Obtenemos el topico del ejercicio segun su contentId
+        topico=buscar_topico(contentCode)
+        #Añadimos el ejercicio
+        ejercicios[contentCode] = {
+            "topico": topico,  # o el tópico que desees
+            "pasos": {}
+        }
+   
 
-#Creamos una lista donde iran los ejercicios, se iran añadiendo los ejercicios de manera ordenada segun su id
-ejercicios=[]
+    # Verificar si el paso existe en el ejercicio
+    #Si no esta, lo añadimos al diccionario de pasos del ejercicio actual
+    if paso not in ejercicios[contentCode]["pasos"]:
+        ejercicios[contentCode]["pasos"][paso] = {
+            "respuesta_correcta": None,  # Inicialmente vacío
+            "respuesta_correcta_parseada": None,
+            "respuestas_incorrectas": {}  # Diccionario de respuestas incorrectas
+        }
 
-#encoding='utf-8', se usa '""' como quotechar por el campo 'extra', ya que este tiene ',' dentro
-with open('Copy of data-1734621405509.csv', newline='') as csvfile:
-    spamreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-    #Saltamos a la seguna linea, ya que la primera contiene los nombres de los campos
-    next(spamreader)
- 
-    #Recorremos el archivo csv linea por linea
-    for row in spamreader:
-        verbName=row[2]
-        #hay 332 ejercicios, 5 de los cuales tiene stepId como array y otros 25 no tienen respuestas incorrectas
-        #Solo nos quedamos con los ejercicios de tipo TryStep
-        if(verbName=="tryStep"):
-            isCorrect = int(row[4])
-            contentCode= row[0]
+    # Si la respuesta es correcta, la agregamos en el campo correspondiente
+    if es_correcta:
+        # Verificar si la respuesta correcta ya está asignada
+        respuesta_correcta_actual = ejercicios[contentCode]["pasos"][paso].get("respuesta_correcta", None)
+        # Si no está asignada, la asignamos
+        if respuesta_correcta_actual is None:
+            ejercicios[contentCode]["pasos"][paso]["respuesta_correcta"] = respuesta
+            ejercicios[contentCode]["pasos"][paso]["respuesta_correcta_parseada"] = respuesta_parseada
+    
 
-            #Si la respuesta es incorrecta, la procesamos
-            if isCorrect==0 :
-                try:
-                    numPaso=int(row[9])
-                    #Ignorar los ejercicios wp(word problems) no seran modificados, tienen stepId como array
-                except ValueError:
-                    continue
+    else:
+        # Si es incorrecta, procedemos a agregar la respuesta incorrecta
+        respuesta_str = str(respuesta)  # Usamos la representación en string de la respuesta para poder compararla con las otras respuestas
+        clave=None
+        # Verificar si la respuesta ya existe en alguna de las respuestas incorrectas
+        respuesta_encontrada = False
+        respuesta_equivalente=None
+        for clave_respuesta, datos_respuesta in ejercicios[contentCode]["pasos"][paso]["respuestas_incorrectas"].items():
+            # Buscar la respuesta en las listas de respuestas y respuestas_sympy
+            #Comparamos las respuestas como string, en su forma bruta
+            if datos_respuesta["respuestas"]==respuesta:
 
-                #Obtenemos el campo extra
-                respuesta=extract_responses(row[13])   
+                respuesta_encontrada = True
+                clave=clave_respuesta
+                break
+            #Si no eran exactamente iguales, procedemos a comparar su version parseada con sympy
+            elif respuesta_parseada and respuesta_parseada == datos_respuesta["respuestas_sympy"]:
+                respuesta_encontrada = True
+                #Si son iguales, eso quiere decir que las respuestas son lo mismo matematicamente, pero son distintas expresiones, por lo tanto, son respuestas equivalentes
+                respuesta_equivalente=respuesta
+                clave=clave_respuesta
+                break
+        
+        # Si no se encuentra la respuesta, la agregamos como nueva
+        if not respuesta_encontrada:
+            #Creamos el ejercicio y lo añadimos, la clave sera la misma respuesta en bruto pero en formato string
+            clave=respuesta_str
+            ejercicios[contentCode]["pasos"][paso]["respuestas_incorrectas"][clave] = {
+                "frecuencia": 1,
+                "estudiantes": [id_estudiante],
+                "respuestas": respuesta,
+                "respuestas_sympy": respuesta_parseada,
+                "respuestas_equivalentes": []
+            }
+            return
+
+        # Si ya exisitia la respuesta incrementamos la frecuencia, agregamos el id del estudiante y añadimos las respuestas equivalentes a la lista si es que las hay
+        respuestas_incorrectas = ejercicios[contentCode]["pasos"][paso]["respuestas_incorrectas"][clave]
+        respuestas_incorrectas["frecuencia"] += 1
+        if id_estudiante not in respuestas_incorrectas["estudiantes"]:
+            respuestas_incorrectas["estudiantes"].append(id_estudiante)
+        if respuesta_equivalente!=None and respuesta_equivalente not in respuestas_incorrectas["respuestas_equivalentes"]:
+            respuestas_incorrectas["respuestas_equivalentes"].append(respuesta_equivalente)
+        
+
+
+    
+#En el diccionario ejercicios almacenaremos toda la informacion de los ejercicios(pasos, respuestas,etc), la forma es la siguiente
+'''
+"ejercicio":{
+    "topico": topico
+    "pasos":{
+        "numPaso":{
+            "respuesta_correcta":[expresion1,expresion2]
+            "respuesta_correcta_parseada": [expresion1_parseada, expresion2_parseada]
+            "respuestas_incorrectas": {
+                                "Incorrecta 1": {
+                                    "frecuencia": 3,
+                                    "estudiantes": [101, 102, 103],
+                                    "respuestas": ["expresión 1", "expresión 2"],
+                                    "respuestas_sympy": ["expresión 1 sympy", "expresión 2 sympy"]
+                                    "respuestas_equivalentes": [["expresion1", "expresion2"]]
+                                },
+                                "Incorrecta 2": {
+                                    "frecuencia": 2,
+                                    "estudiantes": [104, 105],
+                                    "respuestas": ["expresión A", "expresión B"],
+                                    "respuestas_sympy": ["expresión A sympy", "expresión B sympy"]
+                                    "respuestas_equivalentes": [["expresion1", "expresion2"]]
+                                }
+                }
+            }
+        }
+                    '''
+ejercicios={}
+cont=0
+cont2=0
+#Abrimos el archivo .csv y procesamos las lineas
+with open("datos-trystep-noexcel.csv", "r") as archivo:
+    lector = csv.reader(archivo)
+    next(lector)
+    #Recorremos las lineas del archivo
+    for linea in lector:
+        
+        if ("tryStep" in linea) and linea[9].isdigit():  # Revisa si "tryStep" está en cualquier campo e ignorar los ejercicios wp
+            # Procesamos la línea aquí, extraemos el contentId, la respuesta, el id que nos dice si es correcta o no, el numero del paso y la id del estudiante
+            cont2=cont2+1
+            contentId=linea[0]
+            isCorrect=int(linea[4])
+            respuesta=extract_responses(linea[13])
+            paso=int(linea[9])
+            respuesta_parseada=[]
+            idEstudiante=int(linea[6])
+            try:
+                id_topico=int(linea[8])
+            except Exception as e:
+                id_topico=0
             
-                exerciseIndex=binarySearchExercise(ejercicios, contentCode, 0, len(ejercicios)-1)
-                #Si el ejercicio no esta en la lista,lo añadimos
-                if (exerciseIndex)==-1 :
-                    #Creamos un objeto de tipo respuestaIncorrecta, frecuencia 1 ya que es la primera respuesta incorrecta de este tipo
-                    wrongAnswer=Respuestaincorrecta(contentCode,respuesta,1,[int(row[6])])
-                    #Creamos un objeto de tipo Paso, cantidad de respuestas que tiene el paso  y respuesta correcta aun no se añaden
-                    paso=Paso(contentCode,numPaso,None,None,[wrongAnswer])
-                    #Creamos un objeto de tipo Ejercicio
-                    idEjercicio=int(row[1])
-                    ejercicioNuevo = Ejercicio(contentCode, idEjercicio, [paso])
-                    addExercise(ejercicios, ejercicioNuevo)
-                    continue
-                #Si el ejercicio esta, pero no esta el paso, entonces lo añadimos a la lista de pasos de ese ejercicio
-                stepIndex=binarySearchStep(ejercicios[exerciseIndex].steps, numPaso, 0, len(ejercicios[exerciseIndex].steps)-1)
-                if (stepIndex==-1):
-                    ejercicio=ejercicios[exerciseIndex]
-                    #Creamos un objeto de tipo respuestaIncorrecta, frecuencia 1 ya que es la primera respuesta incorrecta de este tipo
-                    wrongAnswer=Respuestaincorrecta(contentCode,respuesta,1,[int(row[6])])
-                    #Creamos un objeto de tipo Paso, cantidad de respuestas que tiene el paso  y respuesta correcta aun no se añaden
-                    paso=Paso(contentCode,numPaso,None,None,[wrongAnswer])
-                    #Añadimos el paso al ejercicio
-                    addStep(ejercicio.steps, paso)
-                    continue
-                wrongAnswerIndex=searchWrongAnswer(ejercicios[exerciseIndex].steps[stepIndex].wrongAnswers, respuesta)
-                #Si esta el ejercicio y el paso, pero no esa respuesta, entonces la añadimos
-                if (wrongAnswerIndex==-1):
-                    #Creamos la respuesta y la agregamos
-                    wrongAnswer=Respuestaincorrecta(contentCode,respuesta,1,[int(row[6])])
-                    ejercicios[exerciseIndex].steps[stepIndex].wrongAnswers.append(wrongAnswer)
-                    continue
-                #Si ya existia el ejercicio, el paso y la respuesta, entonces modificamos la frecuencia y añadimos a la lista de estudiantes(si es que no estaba)
-                ejercicios[exerciseIndex].steps[stepIndex].wrongAnswers[wrongAnswerIndex].frecuency+=1
-                addStudent(ejercicios[exerciseIndex].steps[stepIndex].wrongAnswers[wrongAnswerIndex].students,int(row[6]))
-            #Si nos encontramos con una respuesta correcta, la añadimos
+            if(isCorrect==0):
+                isCorrectBool=False
             else:
-                correctAnswer=extract_responses(row[13])
-                try:
-                    numPaso=int(row[9])
-                    #Ignorar los ejercicios wp(word problems) no seran modificados, tienen stepId como array
-                except ValueError:
-                    continue
-                #Buscamos el ejercicio
-                exerciseIndex=binarySearchExercise(ejercicios, contentCode, 0, len(ejercicios)-1)
-                #Si el ejercicio no esta en la lista,lo añadimos
-                if (exerciseIndex)==-1 :
-                    #Creamos un objeto de tipo Paso con la respuesta correcta del paso, cantidad de respuestas que tiene el paso aun no se añaden
-                    paso=Paso(contentCode,numPaso,None,correctAnswer,[])
-                    #Creamos un objeto de tipo Ejercicio
-                    idEjercicio=int(row[1])
-                    ejercicioNuevo = Ejercicio(contentCode, idEjercicio, [paso])
-                    addExercise(ejercicios, ejercicioNuevo)
-                    continue
-                #Buscamos el paso
-                stepIndex=binarySearchStep(ejercicios[exerciseIndex].steps, numPaso, 0, len(ejercicios[exerciseIndex].steps)-1)
-                #Si esta el ejercicio pero no el paso, lo creamos y ponemos la respuesta correcta
-                if (stepIndex==-1):
-                    ejercicio=ejercicios[exerciseIndex]
-                    #Creamos un objeto de tipo Paso con la respuesta correcta del paso, cantidad de respuestas que tiene el paso aun no se añade
-                    paso=Paso(contentCode,numPaso,None,correctAnswer,[])
-                    #Añadimos el paso al ejercicio
-                    addStep(ejercicio.steps, paso)
-                    continue
-                if (ejercicios[exerciseIndex].steps[stepIndex].correctAnswer==None):
-                    ejercicios[exerciseIndex].steps[stepIndex].correctAnswer=correctAnswer
+                isCorrectBool=True
+            #Intentamos parsear las respuestas
+            try:
+                #Las vamos añadiendo al array de respuestas parseadas
+                for i in range(0,len(respuesta)):
+                    expresion=normalize_expression(respuesta[i])
+                    expresion=sympify(expresion)
+                    respuesta_parseada.append(expresion)
+                anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
+            except Exception as e:
+                #Si no podemos parsear una respuesta, dejamos el array de respuestas parseadas en None
+                cont=cont+1
+                respuesta_parseada=None
+                anadir_ejercicio(contentId,paso,respuesta,respuesta_parseada,idEstudiante,isCorrectBool,id_topico)
+
+
+print(100-((cont/cont2)*100))
 
 # Crear y escribir en el archivo CSV
-archivo = "salida.csv"
+nombre_archivo = "salida.csv"
 
-with open(archivo, mode='w', newline='', encoding='utf-8') as archivo_csv:
-    escritor = csv.writer(archivo_csv)
 
-    # Escribir encabezados
-    encabezados = ["ContentCode", "stepId", "Respuesta correcta","Respuesta Incorrecta 1","Respuesta Incorrecta 2","Respuesta Incorrecta 3","Respuesta Incorrecta 4","Respuesta Incorrecta 5"]
-    escritor.writerow(encabezados)
+with open(nombre_archivo,mode="w", newline='', encoding="utf-8") as archivo:
+    escritor = csv.writer(archivo)
 
-    # Iterar sobre los arreglos y escribirlos en el archivo
-    for ejercicio in ejercicios:
-        contentCode=ejercicio.contentCode
-        for paso in ejercicio.steps:
-            idPaso=paso.stepId
-            respuestasCorrecta=paso.correctAnswer
-            linea=[contentCode,str(idPaso),respuestasCorrecta]
-            
-            if(paso.wrongAnswers==None):
-                for i in range(0,5):
-                    respuestaBlanco="\"\",0,0"
-                    linea.append(respuestaBlanco)
-            elif(len(paso.wrongAnswers)<5):
-                #Añadimos las repsuestas que haya
-                respuestasIncorrectas=paso.wrongAnswers.sort(key=lambda x: x.frecuency, reverse=True)
-                for i in range(0,len(paso.wrongAnswers)):
-                    respuestaMala=str(paso.wrongAnswers[i].answer) +','+ str(len(paso.wrongAnswers[i].students)) + ',' + str(paso.wrongAnswers[i].frecuency)
-                    linea.append(respuestaMala)
-                #El resto lo completamos con respuestas en blanco
-                for i in range(0,5-len(paso.wrongAnswers)):
-                    respuestaBlanco="\"\",0,0"
-                    linea.append(respuestaBlanco)
 
-                #["combfracc","0","'fracc4{}5'","'frac{}34',3,2"....]
-            else:
-                respuestasIncorrectas=paso.wrongAnswers.sort(key=lambda x: x.frecuency, reverse=True)
-                #Añadimos las repsuestas que haya
-                for i in range(0,5):
-                    respuestaMala=str(paso.wrongAnswers[i].answer) +","+str(len(paso.wrongAnswers[i].students))+ "," + str(paso.wrongAnswers[i].frecuency)
-                    linea.append(respuestaMala)
-            escritor.writerow(linea)
+    # Escribir encabezado
+    encabezado = [
+        "ContentCode", "topico", "stepId", "Respuesta Correcta", "Incorrectas equivalentes a correcta",
+        "Respuesta Incorrecta 1", "Respuesta Incorrecta 2", 
+        "Respuesta Incorrecta 3", "Respuesta Incorrecta 4", 
+        "Respuesta Incorrecta 5"
+    ]
+    escritor.writerow(encabezado)
 
-print(f"Archivo {archivo} creado con éxito.")
+    # Recorrer el diccionario ejercicios
+    for content_code, datos in ejercicios.items():
+        #Obtemeos la informacion para poner en las columnas
+        topico = datos["topico"]
+        if topico!=None:
+            for step_id, paso_data in datos["pasos"].items():
+                # Respuesta correcta
+                respuesta_correcta = str(paso_data["respuesta_correcta"]) if paso_data["respuesta_correcta"] else ""             
+
+                # Obtener respuestas incorrectas ordenadas por frecuencia
+                respuestas_incorrectas = sorted(
+                    paso_data["respuestas_incorrectas"].items(),
+                    key=lambda item: item[1]["frecuencia"],
+                    reverse=True
+                ) 
+
+                #Seleccionamos las respuestas equivalentes a la respuesta correctas:
+                respuestas_equivalentes_correcta=[]
+                #Respuestas correcta equivalente
+                if paso_data["respuesta_correcta_parseada"]!=None:
+                    for i in range(0, len(respuestas_incorrectas)):
+                        clave, datos_respuesta = respuestas_incorrectas[i]
+                        #Si respuesta ibcorrecta sympy es igual a respuesta correcta parseada, añadimos la lista de todas las respuestas incorrectas
+                        if datos_respuesta["respuestas_sympy"]!=None and paso_data["respuesta_correcta_parseada"]==datos_respuesta["respuestas_sympy"]:
+                            respuestas_equivalentes_correcta.append(datos_respuesta["respuestas"])
+                            respuestas_equivalentes_correcta+=datos_respuesta.get("respuestas_equivalentes", [])
+                if not (respuestas_equivalentes_correcta):
+                    respuestas_equivalentes_correcta_string='"'
+                else:
+                    
+                    respuestas_equivalentes_correcta_string=""
+                    for j in range(0,len(respuestas_equivalentes_correcta)):
+                        respuestas_equivalentes_correcta_string+=str(respuestas_equivalentes_correcta[j])
+                   
+                # Seleccionar hasta 5 respuestas incorrectas, y expandir si hay empates en N de estudiantes
+                respuestas_incorrectas_columnas = []
+                num_estudiantes_quinta = None
+
+                for idx, (clave, datos_respuesta) in enumerate(respuestas_incorrectas):
+                    respuesta_original = str(datos_respuesta["respuestas"])
+                    respuestas_equivalentes = "".join(map(str, datos_respuesta.get("respuestas_equivalentes", [])))
+                    frecuencia = datos_respuesta["frecuencia"]
+                    num_estudiantes = len(set(datos_respuesta["estudiantes"]))
+
+                    # Añadir respuestas:
+                    if idx < 5:
+                        num_estudiantes_quinta = num_estudiantes  # Actualizar el N de estudiantes de la quinta
+                    elif num_estudiantes_quinta != num_estudiantes:
+                        break  # Salir si el número de estudiantes ya no coincide
+
+                    # Construir columna y agregar
+                    respuestas_incorrectas_columnas.append(
+                        f"{respuesta_original}{respuestas_equivalentes},{num_estudiantes},{frecuencia}"
+                    )
+
+                # Rellenar con valores vacíos si hay menos de 5 respuestas incorrectas
+                while len(respuestas_incorrectas_columnas) < 5:
+                    respuestas_incorrectas_columnas.append('",0,0')
+
+                # Escribir fila
+                fila = [
+                    content_code,
+                    topico,
+                    step_id,
+                    respuesta_correcta,
+                    respuestas_equivalentes_correcta_string,
+                    *respuestas_incorrectas_columnas
+                ]
+                escritor.writerow(fila)
+
+print("Archivo generado correctamente.")

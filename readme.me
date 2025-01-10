@@ -1,0 +1,41 @@
+#Script Analisis de respuestas incorrectas
+
+##Descripcion
+Este script permite analizar las respuestas de un archivo csv, pudiendo organizar las respuestas correctas e icorrectas de diferentes ejercicios, 
+crea un archivo de salida en donde se almacenan las respuestas ordenadas segun ejercicio y paso. La forma del archivo de salida es:
+
+ContentCode, topico, stepId, Respuesta Correcta, Incorrectas equivalentes a correcta, Respuesta Incorrecta 1, Respuesta Incorrecta 2, Respuesta Incorrecta 3, Respuesta Incorrecta 4, Respuesta Incorrecta 5
+Ejemplo:
+CombFrNm01,Fracciones,1, ['\\frac{9}{12}+\\frac{8}{12}-\\frac{10}{12}'] , """" , "['\\frac{9}{12}-\\frac{8}{12}-\\frac{10}{12}'],1,1" ,""",0,0" , """,0,0" , """,0,0" , """,0,0"
+
+Para cada respuesta incorrecta almacenamos la respuesta incorrecta, junto con otras respuestas incorrectas equivalente, el N distinto de estudiantes
+que contestaron esa respuesta y la frecuencia de esa respuesta 
+Si es que hay mas de 5 respuestas incorrectas diferentes, se añadiran, luego de la quinta respuesta, todas las respuestas las cuales el N de estudiantes 
+coincidan con el N de estudiantes de la quinta respuesta incorrecta
+
+Ademas se utiliza la biblioteca sympy para transformar expresiones en latex a expresiones simbolicas, antes de hacer esto se deben normalizar
+las expresiones para evitar errores, para esto utilizamos la funcion "normalize_expression" del archivo parseo.py
+Tambien se tiene un diccionario "ejercicios_por_topico" donde se almacenan los ejercicios con su contentId segun sus topicos y subtopicoa
+
+## Instrucciones de Instalación y ejecucion
+
+Siga los pasos a continuación para instalar y ejecutar el proyecto **Practica-Mateo-Tutor**.
+
+### 1. Clonar el Repositorio
+
+Clone el repositorio a tu máquina local utilizando el siguiente comando:
+
+```bash
+git clone https://github.com/lombrices/Practica-Mateo-Tutor.git
+cd Practica-Mateo-Tutor
+
+###2. Instale las dependencias
+
+```bash
+pip install --upgrade pip
+pip install sympy
+
+###3. Ejecutar script
+
+```bash
+python scriptAnalisis.py
